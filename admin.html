@@ -194,7 +194,7 @@ const firebaseConfig = {
   messagingSenderId: "177612077044",
   appId: "1:177612077044:web:c7993a1d7219c6ccf46ba1"
 };
-const APP_V = 32;   // manter igual ao número em sw.js (marilia-adm-vNN)
+const APP_V = 33;   // manter igual ao número em sw.js (marilia-adm-vNN)
 const ADMIN_UIDS = ["YIA9hIVIs0bJWAMvp8LsMPyDUsy1", "KJ9qu8kZTpejzHi3jzI5DERERMG3"];   // Authentication > Users. Pode ter 1 ou 2 (você e a Marília)
 
 const app = initializeApp(firebaseConfig);
@@ -221,6 +221,9 @@ const catOptions=sel=>CATS.filter(c=>!isVest(c)).slice(0,1).map(c=>`<option ${se
 const diasAte=s=>Math.round((new Date(s+'T12:00')-new Date(today()+'T12:00'))/864e5);
 const fmtW=w=>{const d=String(w||'').replace(/\D/g,'');return d.length>=10?`(${d.slice(0,2)}) ${d.slice(2,-4)}-${d.slice(-4)}`:d};
 const r2=v=>Math.round(v*100)/100;
+// preço de vitrine: dentro de cada dezena, de x0,01 a x5,99 vira x5,00 e de x6,00 a x9,99 vira x9,00
+// (51,01→55 · 55,99→55 · 106,00→109 · 109,89→109). Valor já redondo (50,00) fica como está.
+const arredonda=v=>{const c=Math.round(num(v)*100);if(c<=0)return 0;const dez=Math.floor(c/1000)*10,r=(c%1000)/100;return r===0?c/100:dez+(r<6?5:9);};
 const lc=cat=>{const x=LC[cat]||{};const numero=x.numero||1;const ab=Array.isArray(x.abertos)&&x.abertos.length?x.abertos.map(Number):[numero];
   return {acerto:'',comissao:30,historico:[],lotesCfg:{},...x,numero,abertos:[...new Set(ab)].sort((a,b)=>a-b),fornecedor:x.fornecedor||LOTES[cat].forn};};
 // dados de cada lote aberto (lote antigo, sem lotesCfg, usa os campos acerto/comissao do documento)
@@ -463,6 +466,9 @@ async function formProduto(id){
       return `<span class="pos">✓ ${esc(c)}</span>${novo?' (código novo)':''} · <b>${base+lidas}</b> peça${base+lidas===1?'':'s'}. Para peças idênticas, espere 3 s entre uma leitura e outra.`;}});};
   const catNum=c=>id&&p.categoria===c&&p.catalogo?p.catalogo:lc(c).numero;
   const loteSel=()=>+$('#plote').value||catNum($('#pk').value);
+  // fornecedor Próprio: preço sugerido = custo x 2 (100% de margem), arredondado; vale até a pessoa digitar um preço
+  let precoManual=!!id&&num(p.preco)>0;
+  const auto=()=>{if($('#pf2').value!==PROPRIO||pctOn()||precoManual)return;const c=num($('#pc').value);$('#pp').value=c>0?arredonda(c*2).toFixed(2).replace('.',','):'';};
   let modo=pv.modo||(!isLote(p.categoria)&&pv.comissao!=null?'pct':'custo'), lastCat=p.categoria||'', loteFor='';
   const pctOn=()=>isLote($('#pk').value)||modo==='pct';
   const upd=()=>{const cat=$('#pk').value,lt=isLote(cat),pct=pctOn();
@@ -480,9 +486,9 @@ async function formProduto(id){
     const pr=num($('#pp').value), quem=lt?lcfg(cat,loteSel()).fornecedor:($('#pf2').value||'ao fornecedor');
     if(pct){const m=num($('#pm').value);
       $('#pinfo').innerHTML=`${lt?`Lote ${loteSel()} · `:''}você recebe <b>${brl(pr*m/100)}</b> e repassa <b>${brl(pr-pr*m/100)}</b>${lt||$('#pf2').value?' a '+esc(quem):' ao fornecedor'}.`;}
-    else{const c=num($('#pc').value);$('#pinfo').innerHTML=pr&&$('#pc').value?`Lucro de <b>${brl(pr-c)}</b> (${Math.round((pr-c)/pr*100)}% do preço).`:'';}};
+    else{const c=num($('#pc').value);$('#pinfo').innerHTML=pr&&$('#pc').value?`Lucro de <b>${brl(pr-c)}</b> (${Math.round((pr-c)/pr*100)}% do preço).${$('#pf2').value===PROPRIO?` Sugestão: custo × 2, arredondado (${brl(arredonda(c*2))}). O preço pode ser editado.`:''}`:'';}};
   $('#pmode').querySelectorAll('button').forEach(b=>b.onclick=()=>{modo=b.dataset.m;upd();});
-  ['#pp','#pm','#pc'].forEach(x=>$(x).oninput=upd); $('#pk').onchange=upd; $('#plote').onchange=()=>{if(!id)$('#pm').value=f2(lcfg($('#pk').value,loteSel()).comissao);upd();}; $('#pf2').onchange=()=>{const c=FCFG[$('#pf2').value];if(c?.tipo){modo=c.tipo;if(c.tipo==='pct'&&c.comissao!=null)$('#pm').value=f2(c.comissao);}upd();}; upd();
+  $('#pm').oninput=upd; $('#pp').oninput=()=>{precoManual=$('#pp').value.trim()!=='';upd();}; $('#pc').oninput=()=>{auto();upd();}; $('#pk').onchange=upd; $('#plote').onchange=()=>{if(!id)$('#pm').value=f2(lcfg($('#pk').value,loteSel()).comissao);upd();}; $('#pf2').onchange=()=>{const c=FCFG[$('#pf2').value];if(c?.tipo){modo=c.tipo;if(c.tipo==='pct'&&c.comissao!=null)$('#pm').value=f2(c.comissao);}auto();upd();}; upd();
   const drawPh=()=>{$('#ph').innerHTML=imgs.map((x,i)=>`<div class="p" style="background-image:url('${x}')"><button data-i="${i}" aria-label="Remover foto">✕</button></div>`).join('')+
     (imgs.length<3?`<label class="add"><svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v12H3z"/><circle cx="12" cy="13" r="4"/></svg>Foto<input type="file" accept="image/*" multiple hidden id="pf"></label>`:'');
     $('#ph').querySelectorAll('button').forEach(b=>b.onclick=()=>{imgs.splice(+b.dataset.i,1);drawPh();});
