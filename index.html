@@ -189,7 +189,7 @@ async function openProd(id){
   const enc=p.status==='encomenda', ate=ateProd(p);
   const sh=$('#sheet');
   sh.innerHTML=`<button class="x" aria-label="Fechar">✕</button>
-    <div class="gal" id="gal"><img src="${p.thumb}" alt=""></div><div class="dots" id="dots"></div>
+    <div class="gal" id="gal">${p.thumb?`<img src="${p.thumb}" alt="">`:`<div style="flex:none;width:100%;aspect-ratio:4/5;background:var(--rose)"></div>`}</div><div class="dots" id="dots"></div>
     <div class="body">
       <h2>${esc(p.nome)}</h2><div class="pr">${brl(p.preco)}</div>
       ${p.tamanho?`<p class="note" style="margin:-6px 0 12px;color:var(--txt)">Tamanho: <b>${esc(p.tamanho)}</b></p>`:''}
