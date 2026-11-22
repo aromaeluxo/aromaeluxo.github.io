@@ -194,7 +194,7 @@ const firebaseConfig = {
   messagingSenderId: "177612077044",
   appId: "1:177612077044:web:c7993a1d7219c6ccf46ba1"
 };
-const APP_V = 30;   // manter igual ao número em sw.js (marilia-adm-vNN)
+const APP_V = 32;   // manter igual ao número em sw.js (marilia-adm-vNN)
 const ADMIN_UIDS = ["YIA9hIVIs0bJWAMvp8LsMPyDUsy1", "KJ9qu8kZTpejzHi3jzI5DERERMG3"];   // Authentication > Users. Pode ter 1 ou 2 (você e a Marília)
 
 const app = initializeApp(firebaseConfig);
@@ -224,7 +224,7 @@ const r2=v=>Math.round(v*100)/100;
 const lc=cat=>{const x=LC[cat]||{};const numero=x.numero||1;const ab=Array.isArray(x.abertos)&&x.abertos.length?x.abertos.map(Number):[numero];
   return {acerto:'',comissao:30,historico:[],lotesCfg:{},...x,numero,abertos:[...new Set(ab)].sort((a,b)=>a-b),fornecedor:x.fornecedor||LOTES[cat].forn};};
 // dados de cada lote aberto (lote antigo, sem lotesCfg, usa os campos acerto/comissao do documento)
-const lcfg=(cat,n)=>{const L=lc(cat),c=L.lotesCfg[n]||{},cur=n===L.numero;return {acerto:c.acerto!==undefined?c.acerto:(cur?(L.acerto||''):''),comissao:c.comissao!=null?num(c.comissao):(num(L.comissao)||30)};};
+const lcfg=(cat,n)=>{const L=lc(cat),c=L.lotesCfg[n]||{},cur=n===L.numero;return {acerto:c.acerto!==undefined?c.acerto:(cur?(L.acerto||''):''),comissao:c.comissao!=null?num(c.comissao):(num(L.comissao)||30),fornecedor:c.fornecedor||L.fornecedor};};
 const pLote=p=>p.catalogo||Math.min(...lc(p.categoria).abertos);
 const menos1=s=>{if(!s)return '';const [y,m,d]=s.split('-').map(Number),dt=new Date(y,m-1,d-1);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;};
 const dlCSV=(L,nome)=>{const csv='\ufeff'+L.map(r=>r.map(c=>typeof c==='number'?String(r2(c)).replace('.',','):`"${String(c??'').replace(/"/g,'""')}"`).join(';')).join('\n');
@@ -235,6 +235,9 @@ const uid=()=>doc(collection(db,'x')).id;
 
 let P=[], PRIV={}, R=[], V=[], CFG={}, tab='resumo', mes=today().slice(0,7), pFiltro='disponivel', vFiltro='abertas';
 let unsubs=[], LC={}, FORN=['Tati','Brandon','Missara','Justen'], FCFG={}, C={}, cLoaded=false, clientesSync=new Set(), pCat='', pBusca='';
+const PROPRIO='Próprio';   // peças compradas por você (SP): custo em R$, sem acerto com fornecedor
+const garantePropio=()=>{if(!FORN.includes(PROPRIO))FORN=[...FORN,PROPRIO];if(!FCFG[PROPRIO])FCFG={...FCFG,[PROPRIO]:{tipo:'custo'}};};
+garantePropio();
 
 // ---------- auth ----------
 onAuthStateChanged(auth,u=>{
@@ -255,7 +258,7 @@ function listen(){
     const n=R.filter(r=>r.status==='pendente').length;$('#bdg').textContent=n;$('#bdg').classList.toggle('hide',!n);syncClientes();render();}));
   unsubs.push(onSnapshot(collection(db,'vendas'),s=>{V=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.data||'').localeCompare(a.data||''));syncClientes();render();}));
   LOTE_CATS.forEach(cat=>unsubs.push(onSnapshot(doc(db,'admin_config',LOTES[cat].key),d=>{LC[cat]=d.exists()?d.data():{};render();})));
-  unsubs.push(onSnapshot(doc(db,'admin_config','geral'),d=>{const x=d.exists()?d.data():{};if(Array.isArray(x.fornecedores)&&x.fornecedores.length)FORN=x.fornecedores;FCFG=x.fornCfg||{};render();}));
+  unsubs.push(onSnapshot(doc(db,'admin_config','geral'),d=>{const x=d.exists()?d.data():{};if(Array.isArray(x.fornecedores)&&x.fornecedores.length)FORN=x.fornecedores;FCFG=x.fornCfg||{};garantePropio();render();}));
   unsubs.push(onSnapshot(collection(db,'clientes'),s=>{C={};s.docs.forEach(d=>C[d.id]=d.data());cLoaded=true;syncClientes();}));
   getDoc(doc(db,'config','loja')).then(d=>{CFG=d.exists()?d.data():{};});
 }
@@ -272,7 +275,7 @@ function syncClientes(){ if(!cLoaded) return; const add={};
 }
 const snapItem=p=>{const pv=PRIV[p.id]||{},lt=isLote(p.categoria);return {produtoId:p.id,nome:p.nome,preco:num(p.preco),custo:num(pv.custo),thumb:p.thumb||'',
   categoria:p.categoria||'',subcategoria:p.subcategoria||'',tamanho:p.tamanho||'',catalogo:lt?pLote(p):null,consignado:lt,
-  fornecedor:lt?lc(p.categoria).fornecedor:(pv.fornecedor||''),modo:lt?'pct':(pv.modo||'custo'),codigo:codsDe(p.id).length===1?codsDe(p.id)[0]:''};};
+  fornecedor:lt?lcfg(p.categoria,pLote(p)).fornecedor:(pv.fornecedor||''),modo:lt?'pct':(pv.modo||'custo'),codigo:codsDe(p.id).length===1?codsDe(p.id)[0]:''};};
 
 // ---------- cálculos ----------
 const pago=v=>(v.parcelas||[]).reduce((s,p)=>s+(p.pagoEm?num(p.valorPago):0),0);
@@ -338,11 +341,11 @@ function loteBanner(cat,n){
   const ac=lcfg(cat,n).acerto, L=lc(cat), q=P.filter(p=>p.categoria===cat&&pLote(p)===n&&p.status!=='vendido').length, d=ac?diasAte(ac):null;
   const cls=d==null?'':d<0?'neg':d<=7?'wrn':'';
   const quando=d==null?'sem data de acerto':`acerto ${fdate(ac)} <span class="${cls}">(${d<0?`atrasado ${-d} dia${d===-1?'':'s'}`:d===0?'hoje':`em ${d} dia${d===1?'':'s'}`})</span>`;
-  return `<button class="sjb" data-lote="${esc(cat)}|${n}"><span><b>${esc(cat)} · lote ${n}</b><small>${esc(L.fornecedor)} · ${q} peça${q===1?'':'s'} na vitrine · ${quando}</small></span><span aria-hidden="true">›</span></button>`;
+  return `<button class="sjb" data-lote="${esc(cat)}|${n}"><span><b>${esc(cat)} · lote ${n}</b><small>${esc(lcfg(cat,n).fornecedor)} · ${q} peça${q===1?'':'s'} na vitrine · ${quando}</small></span><span aria-hidden="true">›</span></button>`;
 }
 const loteBanners=cat=>lc(cat).abertos.map(n=>loteBanner(cat,n)).join('');
 const lotesAtivos=()=>LOTE_CATS.filter(c=>P.some(p=>p.categoria===c)||Object.values(lc(c).lotesCfg).some(x=>x&&x.acerto)||lc(c).acerto);
-const fornDe=p=>isLote(p.categoria)?lc(p.categoria).fornecedor:(PRIV[p.id]?.fornecedor||'');
+const fornDe=p=>isLote(p.categoria)?lcfg(p.categoria,pLote(p)).fornecedor:(PRIV[p.id]?.fornecedor||'');
 const ST={disponivel:'Disponíveis',reservado:'Reservados',encomenda:'Encomenda',vendido:'Vendidos',historico:'Já vendidos'};
 function vProdutos(){
   const qb=pBusca.trim().toLowerCase();
@@ -465,7 +468,7 @@ async function formProduto(id){
   const upd=()=>{const cat=$('#pk').value,lt=isLote(cat),pct=pctOn();
     if(cat!==lastCat){ if(lt) $('#pm').value=f2(lcfg(cat,catNum(cat)).comissao); lastCat=cat; }
     if(lt&&loteFor!==cat){loteFor=cat;const ab=[...new Set([...lc(cat).abertos,catNum(cat)])].sort((a,b)=>a-b);
-      $('#plote').innerHTML=ab.map(x=>`<option value="${x}" ${x===catNum(cat)?'selected':''}>Lote ${x}</option>`).join('');}
+      $('#plote').innerHTML=ab.map(x=>`<option value="${x}" ${x===catNum(cat)?'selected':''}>Lote ${x} · ${esc(lcfg(cat,x).fornecedor)}</option>`).join('');}
     $('#plw').classList.toggle('hide',!lt||$('#plote').options.length<2);
     if(lt){const cur=$('#psub').value||p.subcategoria;$('#psub').innerHTML=LOTES[cat].subs.map(x=>`<option ${cur===x?'selected':''}>${x}</option>`).join('');}
     const sts=lt?['disponivel','reservado','vendido']:['disponivel','reservado','encomenda','vendido'], curS=$('#ps').value||p.status;
@@ -474,7 +477,7 @@ async function formProduto(id){
     $('#psubw').classList.toggle('hide',!lt);$('#ptw').classList.toggle('hide',!isVest(cat));$('#pfw').classList.toggle('hide',lt||!cat);
     $('#pcw').classList.toggle('hide',pct);$('#pmw').classList.toggle('hide',!pct);
     $('#ppl').textContent=lt?'Preço da etiqueta (R$)':'Preço de venda (R$)';
-    const pr=num($('#pp').value), quem=lt?lc(cat).fornecedor:($('#pf2').value||'ao fornecedor');
+    const pr=num($('#pp').value), quem=lt?lcfg(cat,loteSel()).fornecedor:($('#pf2').value||'ao fornecedor');
     if(pct){const m=num($('#pm').value);
       $('#pinfo').innerHTML=`${lt?`Lote ${loteSel()} · `:''}você recebe <b>${brl(pr*m/100)}</b> e repassa <b>${brl(pr-pr*m/100)}</b>${lt||$('#pf2').value?' a '+esc(quem):' ao fornecedor'}.`;}
     else{const c=num($('#pc').value);$('#pinfo').innerHTML=pr&&$('#pc').value?`Lucro de <b>${brl(pr-c)}</b> (${Math.round((pr-c)/pr*100)}% do preço).`:'';}};
@@ -491,7 +494,7 @@ async function formProduto(id){
     const nome=$('#pn').value.trim(),cat=$('#pk').value,lt=isLote(cat),preco=num($('#pp').value);
     if(!nome) return alert('Dê um nome ao produto.');
     if(!cat) return alert('Escolha a categoria.');
-    const forn=lt?lc(cat).fornecedor:$('#pf2').value;
+    const forn=lt?lcfg(cat,loteSel()).fornecedor:$('#pf2').value;
     if(!lt&&!forn) return alert('Escolha o fornecedor.');
     if(preco<=0) return alert('Informe o preço.');
     const pct=pctOn(), comissao=pct?num($('#pm').value):null;
@@ -785,7 +788,7 @@ function formVenda(id,reserva,after){
 
 // ---------- CONFIG ----------
 const frow=n=>{const lote=n&&fornDeLote(n),c=FCFG[n]||{};return `<div class="frow"><input data-k="n" value="${esc(n)}" placeholder="Nome">
-  ${lote?`<span class="s" style="flex:1.4;font-size:.78rem;color:var(--muted)">em lote (% definida no lote)</span>`
+  ${n===PROPRIO?`<span class="s" style="flex:1.4;font-size:.78rem;color:var(--muted)">peças próprias: sem acerto, lucro = preço − custo</span>`:lote?`<span class="s" style="flex:1.4;font-size:.78rem;color:var(--muted)">em lote (% definida no lote)</span>`
     :`<select data-k="t"><option value="pct" ${c.tipo==='pct'?'selected':''}>Comissão %</option><option value="custo" ${c.tipo==='custo'?'selected':''}>Valor fixo dele</option></select>
   <input data-k="c" class="${c.tipo==='custo'?'hide':''}" inputmode="decimal" placeholder="%" value="${c.comissao!=null?String(c.comissao).replace('.',','):''}">`}
   <button type="button" data-k="x" aria-label="Remover">✕</button></div>`;};
@@ -793,6 +796,7 @@ function vConfig(){
   const opF=sel=>[...new Set([...FORN,sel].filter(Boolean))].map(f=>`<option ${f===sel?'selected':''}>${esc(f)}</option>`).join('');
   const blocoLote=(cat,n)=>{const k=LOTES[cat].key,c=lcfg(cat,n),L=lc(cat);return `
     <div class="vbloco">${loteBanner(cat,n)}
+    <div class="fld"><label>Fornecedor do lote ${n}</label><select id="lf-${k}-${n}">${[...new Set([...FORN,c.fornecedor])].filter(f=>f&&f!==PROPRIO).map(f=>`<option ${f===c.fornecedor?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
     <div class="row"><div class="fld"><label>Comissão lote ${n} (%)</label><input id="lm-${k}-${n}" inputmode="decimal" value="${String(c.comissao).replace('.',',')}"></div>
       <div class="fld"><label>Data do acerto</label><input id="la-${k}-${n}" type="date" value="${c.acerto||''}"></div></div>
     <p style="color:var(--muted);font-size:.78rem;margin:-4px 0 10px">Na loja as peças deste lote aparecem até um dia antes${c.acerto?`: <b>${fdate(menos1(c.acerto))}</b>`:''}.${n===L.numero?' Produtos novos entram neste lote por padrão.':''}</p>
@@ -800,7 +804,6 @@ function vConfig(){
     <div class="row" style="margin-top:10px"><button class="btn ghost" data-lrel="${esc(cat)}|${n}">Relatório de acerto</button><button class="btn red" data-lenc="${esc(cat)}|${n}">Encerrar lote ${n}</button></div></div>`;};
   const loteSec=cat=>{const L=lc(cat),k=LOTES[cat].key;return `
     <h3 class="sec">${esc(cat)} em consignado</h3>
-    <div class="fld"><label>Fornecedor (vale para todos os lotes)</label><select id="lf-${k}">${opF(L.fornecedor)}</select></div>
     ${L.abertos.map(n=>blocoLote(cat,n)).join('')}
     <button class="btn ghost block" data-lnovo="${esc(cat)}">+ Novo lote (sem encerrar os abertos)</button>
     ${(L.historico||[]).length?`<p style="color:var(--muted);font-size:.8rem;margin-top:10px;line-height:1.6">${L.historico.slice().reverse().map(h=>`Lote ${h.numero}: encerrado ${fdate(h.encerradoEm)} · ${h.vendidas} vendida${h.vendidas===1?'':'s'} · repasse ${brl(h.repasse)}`).join('<br>')}</p>`:''}`;};
@@ -850,8 +853,8 @@ function vConfig(){
   $('#view').querySelectorAll('[data-lsave]').forEach(b=>b.onclick=async()=>{const [cat,n]=pl(b.dataset.lsave),k=LOTES[cat].key,L=lc(cat),m=num($(`#lm-${k}-${n}`).value);
     if(m<=0||m>=100)return alert('Comissão entre 1% e 99%.');
     const ac=$(`#la-${k}-${n}`).value||'', cfgs={}, ate={};
-    L.abertos.forEach(x=>{cfgs[x]=x===n?{acerto:ac,comissao:m}:lcfg(cat,x);ate[x]=menos1(cfgs[x].acerto);});
-    await setDoc(doc(db,'admin_config',k),{numero:L.numero,abertos:L.abertos,fornecedor:$('#lf-'+k).value,lotesCfg:cfgs,acerto:cfgs[L.numero]?.acerto||'',comissao:cfgs[L.numero]?.comissao??m},{merge:true});
+    L.abertos.forEach(x=>{cfgs[x]=x===n?{acerto:ac,comissao:m,fornecedor:$(`#lf-${k}-${n}`).value}:lcfg(cat,x);ate[x]=menos1(cfgs[x].acerto);});
+    await setDoc(doc(db,'admin_config',k),{numero:L.numero,abertos:L.abertos,lotesCfg:cfgs,acerto:cfgs[L.numero]?.acerto||'',comissao:cfgs[L.numero]?.comissao??m},{merge:true});
     await setDoc(doc(db,'config','loja'),{lotesAteN:{[cat]:ate}},{merge:true});
     toast(ac?`Lote ${n} salvo. Clientes veem até ${fdate(menos1(ac))}`:`Lote ${n} salvo`);});
   $('#view').querySelectorAll('[data-lrel]').forEach(b=>b.onclick=()=>{const [c,n]=pl(b.dataset.lrel);relatorioAcerto(c,n);});
@@ -892,11 +895,11 @@ function dadosAcerto(cat,n){
     reservados:devolver.filter(p=>p.status==='reservado').length,valorDevolver:devolver.reduce((a,p)=>a+num(p.preco)*unDe(p),0),pecasDevolver:devolver.reduce((a,p)=>a+unDe(p),0)};
 }
 function relatorioAcerto(cat,n){
-  const L=lc(cat); n=n||L.numero; const A=dadosAcerto(cat,n), gap=Math.max(0,A.repasse-A.recebido);
+  const L=lc(cat); n=n||L.numero; const FN=lcfg(cat,n).fornecedor; const A=dadosAcerto(cat,n), gap=Math.max(0,A.repasse-A.recebido);
   open(`<h4>Acerto · ${esc(cat)} lote ${A.n}<button data-x>✕</button></h4>
-    <p style="color:var(--muted);margin:-8px 0 14px">${esc(L.fornecedor)} · ${lcfg(cat,n).acerto?`acerto em ${fdate(lcfg(cat,n).acerto)}`:'sem data definida'}</p>
+    <p style="color:var(--muted);margin:-8px 0 14px">${esc(FN)} · ${lcfg(cat,n).acerto?`acerto em ${fdate(lcfg(cat,n).acerto)}`:'sem data definida'}</p>
     <div class="kpis">
-      <div class="kpi hero"><small>Repassar a ${esc(L.fornecedor)}</small><b>${brl(A.repasse)}</b><small>${A.vendidos.length} peça${A.vendidos.length===1?'':'s'} vendida${A.vendidos.length===1?'':'s'} · ${brl(A.etiqueta)} em etiqueta</small></div>
+      <div class="kpi hero"><small>Repassar a ${esc(FN)}</small><b>${brl(A.repasse)}</b><small>${A.vendidos.length} peça${A.vendidos.length===1?'':'s'} vendida${A.vendidos.length===1?'':'s'} · ${brl(A.etiqueta)} em etiqueta</small></div>
       <div class="kpi"><small>Sua comissão (após descontos)</small><b class="${A.comissao<0?'neg':'pos'}">${brl(A.comissao)}</b></div>
       <div class="kpi"><small>Já recebido das clientes</small><b>${brl(A.recebido)}</b></div>
       <div class="kpi"><small>Clientes ainda devem</small><b class="wrn">${brl(A.falta)}</b></div>
@@ -913,7 +916,7 @@ function relatorioAcerto(cat,n){
       <div class="mid"><div class="t">${esc(p.nome)}</div><div class="s">${esc(p.subcategoria||'')}${unDe(p)>1?' · <b>'+unDe(p)+' un.</b>':''}${p.status==='reservado'?' · <span class="wrn">reservada</span>':''}</div></div>
       <div class="r">${brl(p.preco)}</div></div>`).join('')||'<div class="empty">Nada a devolver.</div>'}</div>
     <div class="row" style="margin-top:14px"><button class="btn ghost" id="acp">Copiar resumo</button><button class="btn ghost" id="acsv">Baixar CSV</button></div>`);
-  $('#acp').onclick=async()=>{const t=`Acerto ${cat} lote ${A.n} · ${L.fornecedor}\n\nVendidas (${A.vendidos.length}):\n${A.vendidos.map(x=>`• ${x.i.nome} ${x.i.subcategoria?'('+x.i.subcategoria+')':''} — ${brl(x.i.preco)}`).join('\n')}\nTotal etiqueta: ${brl(A.etiqueta)}\nRepasse: ${brl(A.repasse)}\n\nDevolução (${A.devolver.length}):\n${A.devolver.map(p=>`• ${p.nome} — ${brl(p.preco)}`).join('\n')}`;
+  $('#acp').onclick=async()=>{const t=`Acerto ${cat} lote ${A.n} · ${FN}\n\nVendidas (${A.vendidos.length}):\n${A.vendidos.map(x=>`• ${x.i.nome} ${x.i.subcategoria?'('+x.i.subcategoria+')':''} — ${brl(x.i.preco)}`).join('\n')}\nTotal etiqueta: ${brl(A.etiqueta)}\nRepasse: ${brl(A.repasse)}\n\nDevolução (${A.devolver.length}):\n${A.devolver.map(p=>`• ${p.nome} — ${brl(p.preco)}`).join('\n')}`;
     try{await navigator.clipboard.writeText(t);toast('Resumo copiado');}catch{alert(t);}};
   $('#acsv').onclick=()=>dlCSV(csvAcerto(A),`acerto-${LOTES[cat].key}-lote-${A.n}-${today()}.csv`);
 }
@@ -921,32 +924,51 @@ const csvAcerto=A=>[['Situação','Peça','Tipo','Etiqueta','Repasse','Cliente',
   .concat(A.vendidos.map(({v,i})=>['Vendida',i.nome,i.subcategoria||'',num(i.preco),num(i.custo),v.clienteNome,fdate(v.data)]))
   .concat(A.devolver.map(p=>['Devolver',p.nome+(unDe(p)>1?` (${unDe(p)} un.)`:''),p.subcategoria||'',num(p.preco)*unDe(p),num(PRIV[p.id]?.custo)*unDe(p),p.status==='reservado'?'(reservada)':'','']));
 
-async function apagarProdutos(alvo,msgEl){
-  // cópia de segurança de cada produto (dados, custo e fotos) antes de apagar; se a cópia falhar, nada é apagado
-  if(msgEl) msgEl.textContent='Guardando cópia de segurança…';
-  for(let i=0;i<alvo.length;i+=100){const bk=writeBatch(db);
-    await Promise.all(alvo.slice(i,i+100).map(async p=>{let imgs=[];
+let ocupado=0;   // enquanto uma exclusão em massa roda, o app não se recarrega sozinho
+const apagarProdutos=async(alvo,msgEl)=>{ocupado++;try{await apagarProdutosX(alvo,msgEl);}finally{ocupado--;}};
+async function apagarProdutosX(alvo,msgEl){
+  // cópia de segurança leve: dados, custo, miniatura e a 1ª foto (se for pequena). Um produto por vez e lotes de ~2 MB,
+  // para não estourar a memória do iPad nem o limite de 10 MB por gravação do Firestore.
+  try{
+    let bk=writeBatch(db), bytes=0, n=0;
+    for(let i=0;i<alvo.length;i++){const p=alvo[i];
+      if(msgEl) msgEl.textContent=`Guardando cópia de segurança… ${i+1}/${alvo.length}`;
+      let imgs=[];
       try{const d=await getDoc(doc(db,'produtos_img',p.id));imgs=d.exists()?(d.data().imgs||[]):[];}catch{}
-      if(imgs.join('').length>700000) imgs=imgs.slice(0,1);
-      const {id:_i,...pd}=p;
-      bk.set(doc(db,'backup_produtos',p.id),{produto:pd,priv:PRIV[p.id]||{},imgs,nome:p.nome||'',categoria:p.categoria||'',apagadoEm:serverTimestamp()});}));
-    await bk.commit();}
+      imgs=imgs.slice(0,1); if(imgs.join('').length>250000) imgs=[];
+      const {id:_i,...pd}=p, tam=imgs.join('').length+(p.thumb||'').length+3000;
+      if(n&&bytes+tam>2000000){await bk.commit();bk=writeBatch(db);bytes=0;n=0;}
+      bk.set(doc(db,'backup_produtos',p.id),{produto:pd,priv:PRIV[p.id]||{},imgs,nome:p.nome||'',categoria:p.categoria||'',apagadoEm:serverTimestamp()});bytes+=tam;n++;}
+    if(n) await bk.commit();
+  }catch(e){console.error(e);
+    if(!confirm(`Não consegui guardar a cópia de segurança (${e.message||e}).\n\nApagar mesmo assim? Sem a cópia, não dá para restaurar.`)) throw new Error('cancelado: nada foi apagado');}
   const ids=new Set(alvo.map(p=>p.id)), ops=[];
   alvo.forEach(p=>['produtos','produtos_img','produtos_priv'].forEach(c=>ops.push(b=>b.delete(doc(db,c,p.id)))));
   R.filter(r=>r.status==='pendente'&&ids.has(r.produtoId)).forEach(r=>ops.push(b=>b.update(doc(db,'reservas',r.id),{status:'cancelada'})));
   for(let i=0;i<ops.length;i+=450){const b=writeBatch(db);ops.slice(i,i+450).forEach(f=>f(b));await b.commit();
     if(msgEl) msgEl.textContent=`Apagando… ${Math.min(i+450,ops.length)}/${ops.length}`;}
 }
-async function novoLote(cat){
-  const L=lc(cat), k=LOTES[cat].key, nn=Math.max(L.numero,...L.abertos)+1;
-  if(!confirm(`Abrir o lote ${nn} de ${cat.toLowerCase()}?\n\nO${L.abertos.length>1?'s lotes':' lote'} ${L.abertos.join(', ')} continua${L.abertos.length>1?'m':''} aberto${L.abertos.length>1?'s':''}, cada um com sua data de acerto. Produtos novos passam a entrar no lote ${nn} por padrão.`)) return;
-  const cfgs={}, ate={}; L.abertos.forEach(x=>{cfgs[x]=lcfg(cat,x);ate[x]=menos1(cfgs[x].acerto);});
-  cfgs[nn]={acerto:'',comissao:lcfg(cat,L.numero).comissao}; ate[nn]='';
-  try{
-    await setDoc(doc(db,'admin_config',k),{numero:nn,abertos:[...L.abertos,nn],lotesCfg:cfgs,acerto:'',comissao:cfgs[nn].comissao},{merge:true});
-    await setDoc(doc(db,'config','loja'),{lotesAteN:{[cat]:ate}},{merge:true});
-    toast(`Lote ${nn} aberto. Defina a data de acerto dele.`);
-  }catch(e){console.error(e);alert('Erro ao abrir o lote: '+e.message);}
+function novoLote(cat){
+  const L=lc(cat), k=LOTES[cat].key, nn=Math.max(L.numero,...L.abertos)+1, atual=lcfg(cat,L.numero);
+  const nomes=[...new Set([...FORN,...L.abertos.map(x=>lcfg(cat,x).fornecedor)].filter(n=>n&&n!==PROPRIO))];
+  open(`<h4>Novo lote de ${esc(cat.toLowerCase())}<button data-x>✕</button></h4>
+    <p style="color:var(--muted);font-size:.84rem;line-height:1.5;margin:-6px 0 12px">Abre o lote ${nn} sem encerrar ${L.abertos.length>1?'os lotes':'o lote'} ${L.abertos.join(', ')}. Cada lote tem fornecedor, comissão e data de acerto próprios. Para um fornecedor novo, é só digitar o nome.</p>
+    <div class="fld"><label>Fornecedor</label><input id="nlf" list="nlfl" value="${esc(atual.fornecedor)}" autocomplete="off"><datalist id="nlfl">${nomes.map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
+    <div class="row"><div class="fld"><label>Comissão (%)</label><input id="nlm" inputmode="decimal" value="${String(atual.comissao).replace('.',',')}"></div>
+      <div class="fld"><label>Data do acerto (opcional)</label><input id="nla" type="date"></div></div>
+    <button class="btn block" id="nlok">Abrir lote ${nn}</button>`);
+  $('#nlok').onclick=async()=>{const forn=$('#nlf').value.trim(), m=num($('#nlm').value), ac=$('#nla').value||'';
+    if(!forn) return alert('Informe o fornecedor.');
+    if(m<=0||m>=100) return alert('Comissão entre 1% e 99%.');
+    const cfgs={}, ate={}; L.abertos.forEach(x=>{cfgs[x]=lcfg(cat,x);ate[x]=menos1(cfgs[x].acerto);});
+    cfgs[nn]={acerto:ac,comissao:m,fornecedor:forn}; ate[nn]=menos1(ac);
+    $('#nlok').disabled=true;
+    try{
+      if(!FORN.includes(forn)) await setDoc(doc(db,'admin_config','geral'),{fornecedores:[...FORN,forn]},{merge:true});
+      await setDoc(doc(db,'admin_config',k),{numero:nn,abertos:[...L.abertos,nn],lotesCfg:cfgs,acerto:ac,comissao:m},{merge:true});
+      await setDoc(doc(db,'config','loja'),{lotesAteN:{[cat]:ate}},{merge:true});
+      close();toast(`Lote ${nn} (${forn}) aberto`);
+    }catch(e){console.error(e);alert('Erro ao abrir o lote: '+e.message);$('#nlok').disabled=false;}};
 }
 function encerrarLote(cat,n){
   const L=lc(cat); n=n||L.numero;
@@ -967,7 +989,7 @@ function encerrarLote(cat,n){
       await apagarProdutos(alvo,$('#emsg'));
       const resto=L.abertos.filter(x=>x!==n), cfgs={}, ate={}; resto.forEach(x=>{cfgs[x]=lcfg(cat,x);});
       let numero=L.numero;
-      if(atual){numero=prox;resto.push(numero);cfgs[numero]={acerto:'',comissao:lcfg(cat,n).comissao};}
+      if(atual){numero=prox;resto.push(numero);cfgs[numero]={acerto:'',comissao:lcfg(cat,n).comissao,fornecedor:lcfg(cat,n).fornecedor};}
       resto.forEach(x=>{ate[x]=menos1(cfgs[x].acerto);}); ate[n]='';
       await setDoc(doc(db,'config','loja'),{lotesAteN:{[cat]:ate}},{merge:true});
       // só avança a numeração depois que a exclusão terminou
@@ -981,7 +1003,7 @@ function encerrarLote(cat,n){
 // fornecedores de produtos avulsos (não-lote)
 function pendFornecedores(){
   const m={};
-  itensVendidos(i=>!i.consignado&&i.fornecedor&&!i.acertadoEm).forEach(x=>{const f=x.i.fornecedor;(m[f]=m[f]||{nome:f,itens:0,repasse:0});m[f].itens++;m[f].repasse+=num(x.i.custo);});
+  itensVendidos(i=>!i.consignado&&i.fornecedor&&i.fornecedor!==PROPRIO&&!i.acertadoEm).forEach(x=>{const f=x.i.fornecedor;(m[f]=m[f]||{nome:f,itens:0,repasse:0});m[f].itens++;m[f].repasse+=num(x.i.custo);});
   return Object.values(m).sort((a,b)=>b.repasse-a.repasse);
 }
 function acertoFornecedor(nome){
@@ -1077,7 +1099,7 @@ async function pdfTabela({titulo,sub,head,body,foot,arquivo,imgs}){
 
 // ---------- relatório para o fornecedor (sem dados da cliente) ----------
 const fornItem=i=>i.fornecedor||(i.consignado?lc(i.categoria||'Semijoias').fornecedor:'');
-const fornDeLote=n=>LOTE_CATS.some(c=>lc(c).fornecedor===n);
+const fornDeLote=n=>LOTE_CATS.some(c=>lc(c).fornecedor===n||lc(c).abertos.some(x=>lcfg(c,x).fornecedor===n))||V.some(v=>(v.itens||[]).some(i=>i.consignado&&i.fornecedor===n));
 // modelo de negociação: 'pct' = preço fixo do fornecedor + sua comissão; 'custo' = valor do fornecedor + sua margem
 const tipoForn=n=>fornDeLote(n)?'pct':(FCFG[n]?.tipo||'');
 const condicao=v=>{const ps=v.parcelas||[];if(!ps.length)return '';
@@ -1160,7 +1182,7 @@ function corrigirFornecedores(depois){
 }
 
 function relatorioFornecedor(inicial){
-  const nomes=[...new Set([...FORN,...V.flatMap(v=>(v.itens||[]).map(fornItem))].filter(Boolean))];
+  const nomes=[...new Set([...FORN,...V.flatMap(v=>(v.itens||[]).map(fornItem))].filter(n=>n&&n!==PROPRIO))];
   const st={nome:inicial||nomes[0]||''};
   open(`<h4>Relatório para fornecedor<button data-x>✕</button></h4>
     <div class="row"><div class="fld"><label>Fornecedor</label><select id="rfn">${nomes.map(n=>`<option ${n===st.nome?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
@@ -1293,7 +1315,7 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updat
 // o app instalado no iPhone pode ficar "congelado" numa versão antiga: ao abrir/voltar, confere se há versão nova e recarrega
 async function checaVersao(){
   try{const t=await (await fetch('sw.js?t='+Date.now(),{cache:'no-store'})).text();const m=t.match(/marilia-adm-v(\d+)/),nv=m?+m[1]:0;
-    if(nv>APP_V&&sessionStorage.getItem('reloadV')!==String(nv)){sessionStorage.setItem('reloadV',String(nv));toast('Atualizando o app…');
+    if(nv>APP_V&&!ocupado&&sessionStorage.getItem('reloadV')!==String(nv)){sessionStorage.setItem('reloadV',String(nv));toast('Atualizando o app…');
       try{const r=await navigator.serviceWorker?.getRegistration();await r?.update();}catch{}
       setTimeout(()=>location.reload(),700);}}catch{}
 }
