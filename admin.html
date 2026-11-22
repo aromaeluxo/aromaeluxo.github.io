@@ -194,7 +194,7 @@ const firebaseConfig = {
   messagingSenderId: "177612077044",
   appId: "1:177612077044:web:c7993a1d7219c6ccf46ba1"
 };
-const APP_V = 34;   // manter igual ao número em sw.js (marilia-adm-vNN)
+const APP_V = 35;   // manter igual ao número em sw.js (marilia-adm-vNN)
 const ADMIN_UIDS = ["YIA9hIVIs0bJWAMvp8LsMPyDUsy1", "KJ9qu8kZTpejzHi3jzI5DERERMG3"];   // Authentication > Users. Pode ter 1 ou 2 (você e a Marília)
 
 const app = initializeApp(firebaseConfig);
@@ -510,12 +510,11 @@ async function formProduto(id){
     const est=Math.max(0,Math.round(num($('#pqtd').value)));
     const dup=[...new Set(cods.flatMap(c=>outrosCom(c).map(x=>x.nome)))];
     if(dup.length&&!confirm(`Alguns códigos já estão em: ${dup.join(', ')}.\n\nNa venda, ao ler esses códigos, o painel vai perguntar qual produto é. Salvar mesmo assim?`)) return;
-    if(!imgs.length) return alert('Adicione pelo menos uma foto.');
     if(imgs.join('').length>950000) return alert('As fotos passaram do limite. Remova uma.');
     $('#psave').disabled=true;$('#psave').textContent='Salvando…';
     const pid=id||uid(), b=writeBatch(db);
     const data={nome,preco,categoria:cat,subcategoria:lt?$('#psub').value:'',catalogo:lt?loteSel():null,tamanho:isVest(cat)?$('#pt').value.trim():'',
-      descricao:$('#pd').value.trim(),estoque:est,ativo:$('#pa').value==='1',thumb:await thumbFrom(imgs[0])};
+      descricao:$('#pd').value.trim(),estoque:est,ativo:$('#pa').value==='1',thumb:imgs.length?await thumbFrom(imgs[0]):''};
     {const s=$('#ps').value;data.status=est>0&&(s==='vendido'||s==='encomenda')?'disponivel':(est===0&&s==='disponivel'?(isLote(cat)?'vendido':'encomenda'):s);}
     if(!id) data.criadoEm=serverTimestamp();
     b.set(doc(db,'produtos',pid),data,{merge:true});
