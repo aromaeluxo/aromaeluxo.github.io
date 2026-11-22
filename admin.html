@@ -194,7 +194,7 @@ const firebaseConfig = {
   messagingSenderId: "177612077044",
   appId: "1:177612077044:web:c7993a1d7219c6ccf46ba1"
 };
-const APP_V = 33;   // manter igual ao número em sw.js (marilia-adm-vNN)
+const APP_V = 34;   // manter igual ao número em sw.js (marilia-adm-vNN)
 const ADMIN_UIDS = ["YIA9hIVIs0bJWAMvp8LsMPyDUsy1", "KJ9qu8kZTpejzHi3jzI5DERERMG3"];   // Authentication > Users. Pode ter 1 ou 2 (você e a Marília)
 
 const app = initializeApp(firebaseConfig);
@@ -221,9 +221,9 @@ const catOptions=sel=>CATS.filter(c=>!isVest(c)).slice(0,1).map(c=>`<option ${se
 const diasAte=s=>Math.round((new Date(s+'T12:00')-new Date(today()+'T12:00'))/864e5);
 const fmtW=w=>{const d=String(w||'').replace(/\D/g,'');return d.length>=10?`(${d.slice(0,2)}) ${d.slice(2,-4)}-${d.slice(-4)}`:d};
 const r2=v=>Math.round(v*100)/100;
-// preço de vitrine: dentro de cada dezena, de x0,01 a x5,99 vira x5,00 e de x6,00 a x9,99 vira x9,00
-// (51,01→55 · 55,99→55 · 106,00→109 · 109,89→109). Valor já redondo (50,00) fica como está.
-const arredonda=v=>{const c=Math.round(num(v)*100);if(c<=0)return 0;const dez=Math.floor(c/1000)*10,r=(c%1000)/100;return r===0?c/100:dez+(r<6?5:9);};
+// preço de vitrine: dentro de cada dezena, de x0,00 a x5,99 vira x5,00 e de x6,00 a x9,99 vira x9,00
+// (50,00→55 · 51,01→55 · 55,99→55 · 106,00→109 · 109,89→109).
+const arredonda=v=>{const c=Math.round(num(v)*100);if(c<=0)return 0;const dez=Math.floor(c/1000)*10,r=(c%1000)/100;return dez+(r<6?5:9);};
 const lc=cat=>{const x=LC[cat]||{};const numero=x.numero||1;const ab=Array.isArray(x.abertos)&&x.abertos.length?x.abertos.map(Number):[numero];
   return {acerto:'',comissao:30,historico:[],lotesCfg:{},...x,numero,abertos:[...new Set(ab)].sort((a,b)=>a-b),fornecedor:x.fornecedor||LOTES[cat].forn};};
 // dados de cada lote aberto (lote antigo, sem lotesCfg, usa os campos acerto/comissao do documento)
