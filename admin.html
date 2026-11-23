@@ -194,7 +194,7 @@ const firebaseConfig = {
   messagingSenderId: "177612077044",
   appId: "1:177612077044:web:c7993a1d7219c6ccf46ba1"
 };
-const APP_V = 35;   // manter igual ao número em sw.js (marilia-adm-vNN)
+const APP_V = 36;   // manter igual ao número em sw.js (marilia-adm-vNN)
 const ADMIN_UIDS = ["YIA9hIVIs0bJWAMvp8LsMPyDUsy1", "KJ9qu8kZTpejzHi3jzI5DERERMG3"];   // Authentication > Users. Pode ter 1 ou 2 (você e a Marília)
 
 const app = initializeApp(firebaseConfig);
@@ -446,6 +446,9 @@ async function formProduto(id){
     <div class="fld"><label>Descrição</label><textarea id="pd" rows="3" maxlength="800">${esc(p.descricao||'')}</textarea></div>
     <div class="row"><div class="fld"><label>Situação</label><select id="ps"></select></div>
       <div class="fld"><label>Na loja</label><select id="pa"><option value="1" ${p.ativo!==false?'selected':''}>Visível</option><option value="0" ${p.ativo===false?'selected':''}>Oculto</option></select></div></div>
+    ${id?`<div class="dadosloja" style="margin:4px 0 14px"><b style="color:var(--wine);font-size:.92rem">Divulgar este produto</b>
+      <div class="acts"><button type="button" class="btn ghost sm" data-sh="feed">Post / Instagram</button><button type="button" class="btn ghost sm" data-sh="story">Stories</button><button type="button" class="btn ghost sm" data-sh="wa">WhatsApp</button><button type="button" class="btn ghost sm" data-sh="leg">Copiar legenda</button></div>
+      <p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-top:8px">Abre o menu de compartilhar do aparelho com a foto e a legenda (nome, preço, tamanho, descrição e link da loja). Escolha Instagram (Feed ou Stories) ou WhatsApp. A legenda também é copiada: no Instagram, é só colar.</p></div>`:''}
     <p id="pmsg" style="color:var(--muted);font-size:.8rem;margin-bottom:10px"></p>
     <button class="btn block" id="psave">${id?'Salvar alterações':'Cadastrar produto'}</button>
     ${id?'<button class="btn red block" id="pdel" style="margin-top:10px">Excluir produto</button>':''}`);
@@ -496,6 +499,45 @@ async function formProduto(id){
       for(const file of [...e.target.files].slice(0,3-imgs.length)){try{imgs.push(await compress(file,1080,.72));}catch{alert('Não foi possível ler essa imagem.');}}
       $('#pmsg').textContent=`${imgs.length}/3 fotos · ${Math.round(imgs.join('').length/1024)} KB`;drawPh();};};
   drawPh();
+  if(id){
+    const url=new URL('./',location.href).href;
+    const legenda=()=>{const tam=isVest($('#pk').value)?$('#pt').value.trim():'';
+      return [$('#pn').value.trim(),brl(num($('#pp').value))+(tam?' · Tam. '+tam:''),$('#pd').value.trim()].filter(Boolean).join('\n')+'\n\nReserve pelo link da loja: '+url;};
+    const dFile=(u,nome)=>{const [h,b]=u.split(','),mime=(h.match(/:(.*?);/)||[])[1]||'image/jpeg',bin=atob(b),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new File([a],nome,{type:mime});};
+    let cs='',ci=null; const foto=()=>{if(!imgs[0])return null;if(cs!==imgs[0]){cs=imgs[0];ci=new Image();ci.src=imgs[0];}return ci;};
+    foto(); try{document.fonts.load("italic 500 70px 'Bodoni Moda'");document.fonts.load("500 110px 'Bodoni Moda'");document.fonts.load("600 56px Figtree");}catch{}
+    const slug=()=>($('#pn').value||'produto').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'produto';
+    const quebra=(c,t,max)=>{const ls=[];let l='';t.split(/\s+/).forEach(w=>{const x=l?l+' '+w:w;if(c.measureText(x).width>max&&l){ls.push(l);l=w;}else l=x;});if(l)ls.push(l);return ls;};
+    // imagem 9:16 para Stories: marca, foto, nome e preço (tudo síncrono, para não perder o toque no iOS)
+    const storyFile=()=>{const W=1080,H=1920,cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
+      c.fillStyle='#f3eff0';c.fillRect(0,0,W,H);c.textAlign='center';
+      c.fillStyle='#6b2340';c.font="italic 500 70px 'Bodoni Moda',Georgia,serif";c.fillText('Aroma e Luxo',W/2,140);
+      const x=60,y=200,w=960,h=1100,im=foto();
+      c.save();c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,36);else c.rect(x,y,w,h);c.clip();
+      if(im&&im.naturalWidth){const k=Math.max(w/im.naturalWidth,h/im.naturalHeight),sw=w/k,sh=h/k;c.drawImage(im,(im.naturalWidth-sw)/2,(im.naturalHeight-sh)/2,sw,sh,x,y,w,h);}
+      else{c.fillStyle='#e9d3db';c.fillRect(x,y,w,h);}
+      c.restore();
+      c.fillStyle='#2a1f24';c.font="600 56px Figtree,system-ui,sans-serif";
+      const ls=quebra(c,$('#pn').value.trim(),920).slice(0,2);ls.forEach((l,i)=>c.fillText(l,W/2,1400+i*68));
+      let ty=1400+ls.length*68+20;
+      c.fillStyle='#6b2340';c.font="500 110px 'Bodoni Moda',Georgia,serif";c.fillText(brl(num($('#pp').value)),W/2,ty+90);ty+=90;
+      const tam=isVest($('#pk').value)?$('#pt').value.trim():'';
+      if(tam){c.fillStyle='#2a1f24';c.font="500 44px Figtree,system-ui,sans-serif";c.fillText('Tam. '+tam,W/2,ty+70);}
+      c.fillStyle='#857880';c.font="500 38px Figtree,system-ui,sans-serif";c.fillText('Reserve pelo link da loja',W/2,1810);
+      return dFile(cv.toDataURL('image/jpeg',.9),`story-${slug()}.jpg`);};
+    const enviar=async(files,texto,tit)=>{
+      try{navigator.clipboard.writeText(texto).then(()=>toast('Legenda copiada')).catch(()=>{});}catch{}
+      const d={text:texto,title:tit};
+      if(files&&navigator.canShare&&navigator.canShare({files})) d.files=files;
+      if(navigator.share){try{await navigator.share(d);return;}catch(e){if(e.name==='AbortError')return;console.error(e);}}
+      if(files){files.forEach(f=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();});toast('Foto baixada e legenda copiada');}
+      else window.open('https://wa.me/?text='+encodeURIComponent(texto),'_blank');};
+    $('#sheet').querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{
+      const k=b.dataset.sh,tx=legenda();
+      if(k==='leg'){navigator.clipboard.writeText(tx).then(()=>toast('Legenda copiada')).catch(()=>alert(tx));return;}
+      if(!imgs[0]) return alert('Este produto ainda não tem foto. Adicione uma foto para divulgar.');
+      enviar([k==='story'?storyFile():dFile(imgs[0],`${slug()}.jpg`)],tx,$('#pn').value.trim());});
+  }
   $('#psave').onclick=async()=>{
     const nome=$('#pn').value.trim(),cat=$('#pk').value,lt=isLote(cat),preco=num($('#pp').value);
     if(!nome) return alert('Dê um nome ao produto.');
