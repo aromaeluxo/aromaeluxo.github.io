@@ -194,7 +194,7 @@ const firebaseConfig = {
   messagingSenderId: "177612077044",
   appId: "1:177612077044:web:c7993a1d7219c6ccf46ba1"
 };
-const APP_V = 36;   // manter igual ao número em sw.js (marilia-adm-vNN)
+const APP_V = 37;   // manter igual ao número em sw.js (marilia-adm-vNN)
 const ADMIN_UIDS = ["YIA9hIVIs0bJWAMvp8LsMPyDUsy1", "KJ9qu8kZTpejzHi3jzI5DERERMG3"];   // Authentication > Users. Pode ter 1 ou 2 (você e a Marília)
 
 const app = initializeApp(firebaseConfig);
@@ -492,12 +492,17 @@ async function formProduto(id){
     else{const c=num($('#pc').value);$('#pinfo').innerHTML=pr&&$('#pc').value?`Lucro de <b>${brl(pr-c)}</b> (${Math.round((pr-c)/pr*100)}% do preço).${$('#pf2').value===PROPRIO?` Sugestão: custo × 2, arredondado (${brl(arredonda(c*2))}). O preço pode ser editado.`:''}`:'';}};
   $('#pmode').querySelectorAll('button').forEach(b=>b.onclick=()=>{modo=b.dataset.m;upd();});
   $('#pm').oninput=upd; $('#pp').oninput=()=>{precoManual=$('#pp').value.trim()!=='';upd();}; $('#pc').oninput=()=>{auto();upd();}; $('#pk').onchange=upd; $('#plote').onchange=()=>{if(!id)$('#pm').value=f2(lcfg($('#pk').value,loteSel()).comissao);upd();}; $('#pf2').onchange=()=>{const c=FCFG[$('#pf2').value];if(c?.tipo){modo=c.tipo;if(c.tipo==='pct'&&c.comissao!=null)$('#pm').value=f2(c.comissao);}auto();upd();}; upd();
+  const MAXF=8, PASSOS=[[1080,.72],[900,.66],[760,.6],[640,.55],[540,.5]];
+  const reduz=(u,max,q)=>new Promise(res=>{const im=new Image();im.onload=()=>{const k=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',q));};im.onerror=()=>res(u);im.src=u;});
+  // as fotos ficam num único documento (limite ~1 MB): com muitas fotos, reduz o tamanho de todas até caber
+  const ajusta=async()=>{for(let k=1;k<PASSOS.length&&imgs.join('').length>900000;k++){$('#pmsg').textContent='Ajustando o tamanho das fotos…';imgs=await Promise.all(imgs.map(u=>reduz(u,PASSOS[k][0],PASSOS[k][1])));}};
   const drawPh=()=>{$('#ph').innerHTML=imgs.map((x,i)=>`<div class="p" style="background-image:url('${x}')"><button data-i="${i}" aria-label="Remover foto">✕</button></div>`).join('')+
-    (imgs.length<3?`<label class="add"><svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v12H3z"/><circle cx="12" cy="13" r="4"/></svg>Foto<input type="file" accept="image/*" multiple hidden id="pf"></label>`:'');
+    (imgs.length<MAXF?`<label class="add"><svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v12H3z"/><circle cx="12" cy="13" r="4"/></svg>Foto<input type="file" accept="image/*" multiple hidden id="pf"></label>`:'');
     $('#ph').querySelectorAll('button').forEach(b=>b.onclick=()=>{imgs.splice(+b.dataset.i,1);drawPh();});
+    $('#ph').querySelectorAll('.p').forEach((t,i)=>t.onclick=e=>{if(e.target.closest('button')||i===0)return;imgs.unshift(imgs.splice(i,1)[0]);drawPh();$('#pmsg').textContent='Foto definida como capa';});
     const f=$('#pf'); if(f) f.onchange=async e=>{$('#pmsg').textContent='Processando foto…';
-      for(const file of [...e.target.files].slice(0,3-imgs.length)){try{imgs.push(await compress(file,1080,.72));}catch{alert('Não foi possível ler essa imagem.');}}
-      $('#pmsg').textContent=`${imgs.length}/3 fotos · ${Math.round(imgs.join('').length/1024)} KB`;drawPh();};};
+      for(const file of [...e.target.files].slice(0,MAXF-imgs.length)){try{imgs.push(await compress(file,1080,.72));}catch{alert('Não foi possível ler essa imagem.');}}
+      await ajusta();$('#pmsg').textContent=`${imgs.length}/${MAXF} fotos · ${Math.round(imgs.join('').length/1024)} KB · toque numa foto para torná-la a capa`;drawPh();};};
   drawPh();
   if(id){
     const url=new URL('./',location.href).href;
