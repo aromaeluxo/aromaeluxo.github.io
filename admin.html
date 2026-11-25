@@ -163,7 +163,7 @@ body.discreto .priv{color:transparent!important;background:var(--rose);border-ra
 </section>
 
 <section id="app" class="hide">
-  <div class="top"><h2 id="ttl">Resumo</h2><div style="display:flex;gap:8px"><button class="btn ghost sm eye" id="eye" aria-label="Mostrar lucro e custo" title="Mostrar lucro e custo"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button><button class="btn ghost sm" id="out">Sair</button></div></div>
+  <div class="top"><h2 id="ttl">Resumo</h2><div style="display:flex;gap:8px"><button class="btn ghost sm" id="lnk">Link da loja</button><button class="btn ghost sm eye" id="eye" aria-label="Mostrar lucro e custo" title="Mostrar lucro e custo"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button><button class="btn ghost sm" id="out">Sair</button></div></div>
   <div id="view"></div>
 </section>
 
@@ -194,7 +194,7 @@ const firebaseConfig = {
   messagingSenderId: "177612077044",
   appId: "1:177612077044:web:c7993a1d7219c6ccf46ba1"
 };
-const APP_V = 37;   // manter igual ao número em sw.js (marilia-adm-vNN)
+const APP_V = 38;   // manter igual ao número em sw.js (marilia-adm-vNN)
 const ADMIN_UIDS = ["YIA9hIVIs0bJWAMvp8LsMPyDUsy1", "KJ9qu8kZTpejzHi3jzI5DERERMG3"];   // Authentication > Users. Pode ter 1 ou 2 (você e a Marília)
 
 const app = initializeApp(firebaseConfig);
@@ -251,6 +251,10 @@ $('#lf').onsubmit=async e=>{e.preventDefault();$('#lerr').textContent='';
   try{ const c=await signInWithEmailAndPassword(auth,$('#le').value,$('#lp').value); if(!ADMIN_UIDS.includes(c.user.uid)) $('#lerr').textContent='Esta conta não tem acesso ao painel.'; }
   catch(err){ $('#lerr').textContent='E-mail ou senha incorretos.'; } };
 $('#out').onclick=()=>signOut(auth);
+// link público da loja (mesma pasta do painel): um toque copia, é só colar no WhatsApp
+const lojaUrl=()=>new URL('./',location.href).href;
+const copiar=async(t,msg)=>{try{await navigator.clipboard.writeText(t);toast(msg);}catch{prompt('Copie o link:',t);}};
+$('#lnk').onclick=()=>copiar(lojaUrl(),'Link da loja copiado');
 const setDiscreto=on=>{document.body.classList.toggle('discreto',on);$('#eye').setAttribute('aria-pressed',String(!on));};
 $('#eye').onclick=()=>setDiscreto(!document.body.classList.contains('discreto'));
 
@@ -447,7 +451,7 @@ async function formProduto(id){
     <div class="row"><div class="fld"><label>Situação</label><select id="ps"></select></div>
       <div class="fld"><label>Na loja</label><select id="pa"><option value="1" ${p.ativo!==false?'selected':''}>Visível</option><option value="0" ${p.ativo===false?'selected':''}>Oculto</option></select></div></div>
     ${id?`<div class="dadosloja" style="margin:4px 0 14px"><b style="color:var(--wine);font-size:.92rem">Divulgar este produto</b>
-      <div class="acts"><button type="button" class="btn ghost sm" data-sh="feed">Post / Instagram</button><button type="button" class="btn ghost sm" data-sh="story">Stories</button><button type="button" class="btn ghost sm" data-sh="wa">WhatsApp</button><button type="button" class="btn ghost sm" data-sh="leg">Copiar legenda</button></div>
+      <div class="acts"><button type="button" class="btn ghost sm" data-sh="feed">Post / Instagram</button><button type="button" class="btn ghost sm" data-sh="story">Stories</button><button type="button" class="btn ghost sm" data-sh="wa">WhatsApp</button><button type="button" class="btn ghost sm" data-sh="leg">Copiar legenda</button><button type="button" class="btn ghost sm" data-sh="link">Copiar link do produto</button></div>
       <p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-top:8px">Abre o menu de compartilhar do aparelho com a foto e a legenda (nome, preço, tamanho, descrição e link da loja). Escolha Instagram (Feed ou Stories) ou WhatsApp. A legenda também é copiada: no Instagram, é só colar.</p></div>`:''}
     <p id="pmsg" style="color:var(--muted);font-size:.8rem;margin-bottom:10px"></p>
     <button class="btn block" id="psave">${id?'Salvar alterações':'Cadastrar produto'}</button>
@@ -505,9 +509,9 @@ async function formProduto(id){
       await ajusta();$('#pmsg').textContent=`${imgs.length}/${MAXF} fotos · ${Math.round(imgs.join('').length/1024)} KB · toque numa foto para torná-la a capa`;drawPh();};};
   drawPh();
   if(id){
-    const url=new URL('./',location.href).href;
+    const url=lojaUrl()+'#p='+id;
     const legenda=()=>{const tam=isVest($('#pk').value)?$('#pt').value.trim():'';
-      return [$('#pn').value.trim(),brl(num($('#pp').value))+(tam?' · Tam. '+tam:''),$('#pd').value.trim()].filter(Boolean).join('\n')+'\n\nReserve pelo link da loja: '+url;};
+      return [$('#pn').value.trim(),brl(num($('#pp').value))+(tam?' · Tam. '+tam:''),$('#pd').value.trim()].filter(Boolean).join('\n')+'\n\nReserve por aqui: '+url;};
     const dFile=(u,nome)=>{const [h,b]=u.split(','),mime=(h.match(/:(.*?);/)||[])[1]||'image/jpeg',bin=atob(b),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new File([a],nome,{type:mime});};
     let cs='',ci=null; const foto=()=>{if(!imgs[0])return null;if(cs!==imgs[0]){cs=imgs[0];ci=new Image();ci.src=imgs[0];}return ci;};
     foto(); try{document.fonts.load("italic 500 70px 'Bodoni Moda'");document.fonts.load("500 110px 'Bodoni Moda'");document.fonts.load("600 56px Figtree");}catch{}
@@ -539,6 +543,7 @@ async function formProduto(id){
       else window.open('https://wa.me/?text='+encodeURIComponent(texto),'_blank');};
     $('#sheet').querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{
       const k=b.dataset.sh,tx=legenda();
+      if(k==='link'){copiar(url,'Link do produto copiado');return;}
       if(k==='leg'){navigator.clipboard.writeText(tx).then(()=>toast('Legenda copiada')).catch(()=>alert(tx));return;}
       if(!imgs[0]) return alert('Este produto ainda não tem foto. Adicione uma foto para divulgar.');
       enviar([k==='story'?storyFile():dFile(imgs[0],`${slug()}.jpg`)],tx,$('#pn').value.trim());});
