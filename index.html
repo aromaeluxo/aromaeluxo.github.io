@@ -146,7 +146,7 @@ async function load(){
     produtos = snap.docs.map(d=>({id:d.id,...d.data()}))
       .filter(p=>p.ativo!==false&&!(LOTES[p.categoria]&&(p.status==='encomenda'||(ateProd(p)&&hoje()>ateProd(p)))))
       .sort((a,b)=>(b.criadoEm?.seconds||0)-(a.criadoEm?.seconds||0));
-    renderFilters(); render();
+    renderFilters(); render(); abreHash();
   }catch(e){ console.error(e); $('#empty').textContent='Não foi possível carregar os produtos. Verifique sua conexão e recarregue a página.'; }
 }
 
@@ -245,6 +245,9 @@ async function reservar(p){
     $('#bk').onclick=close;
   }catch(e){ console.error(e); $('#rb').disabled=false; $('#rb').textContent='Tentar de novo'; alert('O pedido não foi enviado. Confira a conexão e tente de novo.'); }
 }
+// link direto para um produto: https://…/#p=ID abre o produto assim que a loja carrega
+const abreHash=()=>{const m=location.hash.match(/^#p=([\w-]+)/);if(m&&produtos.some(p=>p.id===m[1]))openProd(m[1]);};
+addEventListener('hashchange',abreHash);
 load();
 </script>
 </body>
